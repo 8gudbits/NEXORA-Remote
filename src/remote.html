@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NEXORA Remote</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.0.0/mqtt.min.js"></script>
+    <style>
+        :root {
+            --remote-w: 248px;
+            --remote-h: 520px;
+            --gunmetal-base: #19191f;
+            --display-bg: #0b0b12;
+            --display-text: #e0d5c2;
+            --btn-surface: #22222b;
+            --led-green: #2ecc71;
+            --led-amber: #f1c40f;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: #08080c;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            color: #e4e4e7;
+            padding: 20px;
+            background-image:
+                radial-gradient(ellipse at 50% 40%, rgba(45, 38, 28, 0.55) 0%, transparent 70%),
+                radial-gradient(ellipse at 50% 55%, rgba(30, 26, 20, 0.4) 0%, transparent 60%),
+                linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 28px 28px, 28px 28px;
+            background-position: center, center, 0 0, 0 0;
+        }
+
+        .glow-aura {
+            position: fixed;
+            width: 300px;
+            height: 540px;
+            border-radius: 50%;
+            background: radial-gradient(ellipse, rgba(190, 140, 60, 0.09) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            filter: blur(30px);
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            width: var(--remote-w);
+            height: var(--remote-h);
+            background: #19191f;
+            border-radius: 26px;
+            padding: 0;
+            box-shadow:
+                0 30px 70px rgba(0, 0, 0, 0.8), 0 8px 20px rgba(0, 0, 0, 0.6),
+                inset 0 1px 0 rgba(255, 255, 255, 0.04),
+                inset 0 -2px 0 rgba(0, 0, 0, 0.5),
+                0 0 0 1px rgba(255, 255, 255, 0.03);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+            background-image:
+                linear-gradient(175deg,
+                    rgba(255, 255, 255, 0.025) 0%,
+                    rgba(255, 255, 255, 0.005) 25%,
+                    rgba(0, 0, 0, 0.0) 50%,
+                    rgba(0, 0, 0, 0.18) 85%,
+                    rgba(0, 0, 0, 0.35) 100%),
+                linear-gradient(90deg,
+                    rgba(255, 255, 255, 0.018) 0%,
+                    rgba(255, 255, 255, 0.004) 35%,
+                    rgba(0, 0, 0, 0.0) 60%,
+                    rgba(0, 0, 0, 0.14) 100%);
+            overflow: hidden;
+        }
+
+        .container::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 26px;
+            pointer-events: none;
+            z-index: 10;
+            background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 255, 255, 0.003) 3px, rgba(255, 255, 255, 0.003) 4px);
+            opacity: 0.5;
+        }
+
+        .container::after {
+            content: '';
+            position: absolute;
+            inset: 4px;
+            border-radius: 22px;
+            pointer-events: none;
+            z-index: 9;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+        }
+
+        .top-bar {
+            position: relative;
+            z-index: 12;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 24px 6px 24px;
+            gap: 10px;
+        }
+
+        .logo {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: #7a7a88;
+            background: linear-gradient(180deg, #9a9a88 0%, #5a5a4e 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .status-group {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .status-text {
+            font-size: 0.6rem;
+            font-weight: 500;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            color: #5a5a5e;
+            transition: color 0.4s ease;
+        }
+        .status-text.online-text { color: #7abf8a; }
+        .status-text.pending-text { color: #c9a84c; }
+
+        .status-led {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: #2a2a33;
+            box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.5);
+            transition: all 0.35s ease;
+        }
+        .status-led.online {
+            background: var(--led-green);
+            box-shadow: 0 0 6px rgba(46, 204, 113, 0.7), 0 0 14px rgba(46, 204, 113, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            animation: ledPulse 3s ease-in-out infinite;
+        }
+        .status-led.offline { background: #2a2a33; }
+        .status-led.pending {
+            background: var(--led-amber);
+            box-shadow: 0 0 6px rgba(241, 196, 15, 0.6), 0 0 12px rgba(241, 196, 15, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+            animation: ledBlink 0.7s ease-in-out infinite;
+        }
+
+        @keyframes ledPulse {
+            0%, 100% { box-shadow: 0 0 6px rgba(46, 204, 113, 0.7), 0 0 14px rgba(46, 204, 113, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3); }
+            50% { box-shadow: 0 0 10px rgba(46, 204, 113, 0.9), 0 0 22px rgba(46, 204, 113, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
+        }
+        @keyframes ledBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.35; }
+        }
+
+        .display-area {
+            position: relative;
+            z-index: 12;
+            width: calc(100% - 40px);
+            margin: 4px 20px 6px 20px;
+            background: #0b0b12;
+            border-radius: 10px;
+            padding: 8px 10px;
+            box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.7), inset 0 -1px 0 rgba(255, 255, 255, 0.03), 0 1px 0 rgba(255, 255, 255, 0.03);
+            border: 1px solid #1f1f28;
+            height: 44px;
+            display: flex;
+            align-items: center;
+        }
+
+        .keycap-input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            outline: none;
+            text-align: center;
+            font-family: 'Inter', 'SF Mono', 'Consolas', monospace;
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: 9px;
+            color: var(--display-text);
+            caret-color: #d4b06a;
+            text-shadow: 0 0 8px rgba(210, 170, 100, 0.4);
+            transition: all 0.3s ease;
+            border-radius: 6px;
+        }
+        .keycap-input:focus {
+            text-shadow: 0 0 14px rgba(220, 170, 90, 0.6), 0 0 3px rgba(240, 190, 100, 0.65);
+            color: #f0e2cc;
+        }
+        .keycap-input::placeholder {
+            letter-spacing: 5px;
+            font-weight: 400;
+            color: #2c2c34;
+            text-shadow: none;
+            font-size: 0.85rem;
+        }
+
+        /* Connection Strip */
+        .connection-strip {
+            position: relative;
+            z-index: 12;
+            width: calc(100% - 40px);
+            margin: 0 20px 6px 20px;
+            height: 34px;
+            border-radius: 10px;
+            background: linear-gradient(180deg, #262630 0%, #1e1e26 100%);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.1s ease;
+            user-select: none;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 0.7rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #8a8a90;
+        }
+        .connection-strip:active:not(:disabled) {
+            transform: translateY(2px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5), inset 0 2px 4px rgba(0, 0, 0, 0.3);
+            background: linear-gradient(180deg, #1c1c24 0%, #18181f 100%);
+        }
+        .connection-strip.disconnect-state {
+            color: #d07070;
+            border-color: rgba(200, 60, 60, 0.15);
+        }
+        .connection-strip:disabled {
+            opacity: 0.4;
+            pointer-events: none;
+            cursor: not-allowed;
+        }
+
+        .divider {
+            position: relative;
+            z-index: 12;
+            width: 60%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.03), transparent);
+            margin: 4px auto 8px auto;
+            border-radius: 1px;
+        }
+
+        /* Action grid */
+        .action-grid {
+            position: relative;
+            z-index: 12;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 0 20px 10px 20px;
+        }
+
+        .keycap-action {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+            outline: none;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            transition: all 0.1s cubic-bezier(0.25, 0.8, 0.25, 1.2);
+            position: relative;
+            overflow: hidden;
+            color: #c8c8d8;
+            background: linear-gradient(180deg, #282832 0%, #23232c 40%, #1e1e27 100%);
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+            border-bottom: 4px solid #16161e;
+            height: 64px;
+        }
+
+        .action-row {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .keycap-action.left,
+        .keycap-action.right {
+            flex: 1;
+            justify-content: center;
+            gap: 4px;
+            padding: 0 16px;
+            font-size: 0.95rem;
+        }
+        .keycap-action.left { border-left: 2px solid rgba(232, 168, 80, 0.3); }
+        .keycap-action.right { border-right: 2px solid rgba(77, 184, 141, 0.35); }
+        .keycap-action.left::after,
+        .keycap-action.right::after {
+            content: '';
+            position: absolute;
+            top: 8px;
+            left: 12px;
+            right: 12px;
+            height: 40%;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.015);
+            pointer-events: none;
+            transition: all 0.1s ease;
+        }
+        .keycap-action.left:active:not(:disabled),
+        .keycap-action.right:active:not(:disabled) {
+            transform: translateY(3px);
+            border-bottom-width: 1px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 3px 6px rgba(0, 0, 0, 0.4);
+            background: linear-gradient(180deg, #1e1e27 0%, #1a1a22 60%, #181820 100%);
+        }
+        .keycap-action.left:active:not(:disabled)::after,
+        .keycap-action.right:active:not(:disabled)::after { opacity: 0.3; top: 4px; }
+
+        .keycap-action .arrow-symbol { font-size: 1.5rem; }
+        .keycap-action.left .arrow-symbol { color: #d4a860; text-shadow: 0 0 10px rgba(220, 160, 60, 0.35); }
+        .keycap-action.right .arrow-symbol { color: #5cba90; text-shadow: 0 0 10px rgba(60, 180, 120, 0.35); }
+        .keycap-action .arrow-label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            letter-spacing: 2.5px;
+            text-transform: uppercase;
+        }
+        .keycap-action.left .arrow-label { color: #7a6a4a; }
+        .keycap-action.right .arrow-label { color: #3e5e4a; }
+
+        .keycap-action.up,
+        .keycap-action.down {
+            font-size: 1.8rem;
+            color: #b0a88a;
+            text-shadow: 0 0 6px rgba(180, 140, 80, 0.2);
+            border-left: 1px solid rgba(255,255,255,0.02);
+            border-right: 1px solid rgba(255,255,255,0.02);
+        }
+        .keycap-action.up:active:not(:disabled),
+        .keycap-action.down:active:not(:disabled) {
+            transform: translateY(3px);
+            border-bottom-width: 1px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 3px 6px rgba(0, 0, 0, 0.4);
+            background: linear-gradient(180deg, #1e1e27 0%, #1a1a22 60%, #181820 100%);
+        }
+
+        .keycap-action:disabled {
+            opacity: 0.3;
+            transform: translateY(2px);
+            border-bottom-width: 2px;
+            pointer-events: none;
+            filter: grayscale(0.4);
+        }
+
+        .footer {
+            position: relative;
+            z-index: 12;
+            text-align: center;
+            font-size: 0.55rem;
+            color: #3a3a42;
+            letter-spacing: 2px;
+            padding: 4px 0 12px 0;
+            text-transform: uppercase;
+            font-weight: 500;
+            border-top: 1px solid rgba(255, 255, 255, 0.025);
+            width: 70%;
+            margin: 0 auto;
+        }
+
+        @media (max-width: 420px) {
+            :root {
+                --remote-w: 220px;
+                --remote-h: 480px;
+            }
+            .container { border-radius: 22px; }
+            .container::before, .container::after { border-radius: 22px; }
+            .container::after { inset: 3px; border-radius: 19px; }
+            .keycap-action { height: 56px; border-radius: 14px; }
+            .keycap-action .arrow-symbol { font-size: 1.3rem; }
+            .keycap-action .arrow-label { font-size: 0.65rem; letter-spacing: 2px; }
+            .action-grid { gap: 6px; padding: 0 16px 8px 16px; }
+            .display-area { width: calc(100% - 32px); margin: 4px 16px 4px 16px; height: 40px; }
+            .keycap-input { font-size: 1.1rem; letter-spacing: 7px; }
+            .connection-strip { width: calc(100% - 32px); margin: 0 16px 4px 16px; height: 30px; font-size: 0.65rem; }
+            .top-bar { padding: 14px 18px 4px 18px; }
+            .logo { font-size: 0.6rem; letter-spacing: 3px; }
+            .footer { padding: 4px 0 10px 0; font-size: 0.5rem; }
+        }
+
+        @media (max-width: 340px) {
+            :root {
+                --remote-w: 190px;
+                --remote-h: 440px;
+            }
+            .keycap-action { height: 50px; border-radius: 12px; }
+            .keycap-action .arrow-symbol { font-size: 1.1rem; }
+            .action-grid { gap: 5px; }
+            .display-area { height: 36px; }
+            .keycap-input { font-size: 1rem; letter-spacing: 5px; }
+            .connection-strip { height: 28px; font-size: 0.6rem; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="glow-aura"></div>
+    <div class="container" id="app">
+        <div class="top-bar">
+            <span class="logo">Nexora</span>
+            <div class="status-group">
+                <span class="status-text" id="statusText">Disconnected</span>
+                <span class="status-led offline" id="statusLed"></span>
+            </div>
+        </div>
+
+        <!-- Input -->
+        <div class="display-area">
+            <input type="text" class="keycap-input" id="roomInput" maxlength="6" placeholder="000000"
+                inputmode="numeric" pattern="[0-9]*">
+        </div>
+
+        <!-- Connection strip -->
+        <div class="connection-strip pair-state" id="connectStrip">Pair</div>
+
+        <!-- Divider -->
+        <div class="divider"></div>
+
+        <!-- Action Keys: Up, Prev/Next row, Down -->
+        <div class="action-grid">
+            <button class="keycap-action up" id="upBtn" disabled>▲</button>
+            <div class="action-row">
+                <button class="keycap-action left" id="leftBtn" disabled>
+                    <span class="arrow-label">Prev</span>
+                    <span class="arrow-symbol">◀</span>
+                </button>
+                <button class="keycap-action right" id="rightBtn" disabled>
+                    <span class="arrow-symbol">▶</span>
+                    <span class="arrow-label">Next</span>
+                </button>
+            </div>
+            <button class="keycap-action down" id="downBtn" disabled>▼</button>
+        </div>
+
+        <div class="footer">
+            <span>NEXORA Remote</span>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
+            let isConnected = false;
+            let client = null;
+            let currentRoom = '1234';
+
+            const roomInput = document.getElementById('roomInput');
+            const connectStrip = document.getElementById('connectStrip');
+            const statusText = document.getElementById('statusText');
+            const statusLed = document.getElementById('statusLed');
+            const leftBtn = document.getElementById('leftBtn');
+            const rightBtn = document.getElementById('rightBtn');
+            const upBtn = document.getElementById('upBtn');
+            const downBtn = document.getElementById('downBtn');
+
+            function setStatus(text, state) {
+                statusText.innerText = text;
+                statusLed.className = 'status-led ' + state;
+                statusText.classList.remove('online-text', 'pending-text');
+                if (state === 'online') statusText.classList.add('online-text');
+                if (state === 'pending') statusText.classList.add('pending-text');
+            }
+
+            function updateStripUI() {
+                if (isConnected) {
+                    connectStrip.innerText = 'Disconnect';
+                    connectStrip.className = 'connection-strip disconnect-state';
+                } else {
+                    connectStrip.innerText = 'Pair';
+                    connectStrip.className = 'connection-strip pair-state';
+                }
+            }
+
+            function setConnectedUI(connected) {
+                isConnected = connected;
+                const allBtns = [leftBtn, rightBtn, upBtn, downBtn];
+                allBtns.forEach(b => b.disabled = !connected);
+                if (connected) {
+                    setStatus('Connected', 'online');
+                } else {
+                    setStatus('Disconnected', 'offline');
+                }
+                updateStripUI();
+            }
+
+            function destroyClient() {
+                if (client) {
+                    try { client.end(true, function () { }); } catch (e) { }
+                    client = null;
+                }
+            }
+
+            function sendKey(keyName) {
+                if (!isConnected || !client || !client.connected) {
+                    setStatus('Not connected', 'offline');
+                    return;
+                }
+                const topic = 'nexora/room/' + currentRoom + '/keys';
+                const payload = JSON.stringify({ key: keyName });
+
+                client.publish(topic, payload, { qos: 0 }, function (err) {
+                    if (err) {
+                        setStatus('Send failed', 'offline');
+                    } else {
+                        setStatus('Sent ' + keyName, 'online');
+                    }
+                });
+            }
+
+            function toggleConnection() {
+                if (isConnected) {
+                    destroyClient();
+                    setConnectedUI(false);
+                    return;
+                }
+
+                var room = roomInput.value.trim() || '1234';
+                if (room.length !== 6 || !/^\d{6}$/.test(room)) {
+                    setStatus('Invalid code', 'offline');
+                    roomInput.focus();
+                    return;
+                }
+
+                currentRoom = room;
+                destroyClient();
+
+                setStatus('Connecting...', 'pending');
+                connectStrip.disabled = true;
+
+                client = mqtt.connect(BROKER_URL);
+
+                client.on('connect', function () {
+                    connectStrip.disabled = false;
+                    setConnectedUI(true);
+                });
+
+                client.on('error', function () {
+                    connectStrip.disabled = false;
+                    if (!isConnected) {
+                        setConnectedUI(false);
+                        setStatus('Connection failed', 'offline');
+                    }
+                });
+
+                client.on('close', function () {
+                    connectStrip.disabled = false;
+                    if (isConnected) {
+                        setConnectedUI(false);
+                        setStatus('Lost connection', 'offline');
+                    } else {
+                        setConnectedUI(false);
+                    }
+                });
+
+                client.on('offline', function () {
+                    connectStrip.disabled = false;
+                    if (isConnected) {
+                        setConnectedUI(false);
+                        setStatus('Network lost', 'offline');
+                    }
+                });
+            }
+
+            function handleUrlParam() {
+                var params = new URLSearchParams(window.location.search);
+                var code = params.get('code');
+                if (code && code.length === 6 && /^\d{6}$/.test(code)) {
+                    roomInput.value = code;
+                    setTimeout(function () { connectStrip.click(); }, 500);
+                }
+            }
+
+            connectStrip.addEventListener('click', toggleConnection);
+            leftBtn.addEventListener('click', function () { sendKey('left'); });
+            rightBtn.addEventListener('click', function () { sendKey('right'); });
+            upBtn.addEventListener('click', function () { sendKey('up'); });
+            downBtn.addEventListener('click', function () { sendKey('down'); });
+
+            setConnectedUI(false);
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', handleUrlParam);
+            } else {
+                handleUrlParam();
+            }
+
+            roomInput.addEventListener('input', function () {
+                this.value = this.value.replace(/\D/g, '').slice(0, 6);
+            });
+        })();
+    </script>
+</body>
+</html>
+

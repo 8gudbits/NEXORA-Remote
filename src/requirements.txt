@@ -1,0 +1,5 @@
+pillow
+qrcode
+paho-mqtt
+keyboard
+
