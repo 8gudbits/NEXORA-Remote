@@ -11,7 +11,7 @@ from tkinter import messagebox
 from PIL import Image, ImageTk
 
 # ---------- CONFIGURATION ----------
-BASE_URL = "http://192.168.255.102:5500/remote.html?code="
+BASE_URL = "https://nexora.noman.qzz.io/remote?code="
 MQTT_BROKER = "broker.emqx.io"
 MQTT_PORT = 1883
 
