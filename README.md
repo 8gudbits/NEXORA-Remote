@@ -2,6 +2,13 @@
 
 A phone-based remote for controlling your presentation slides over the internet.
 
+# Preview
+
+<div align="center">
+<img src="/preview/2.png" width=250>
+<img src="/preview/1.png" width=250>
+</div>
+
 ## How it works
 
 Your PC runs a small app that connects to a public MQTT broker. On your phone, you open a web page, enter a 6-digit room code, or scan a QR code and start sending left/right arrow commands. The PC picks these up and simulates the corresponding arrow key presses, so you can move forward or backward through slides in pretty much any presentation software -- PowerPoint, Google Slides, Keynote, PDF viewers, you name it.
